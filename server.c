@@ -10,6 +10,8 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <semaphore.h>
+#include <sys/sem.h>
+#include "game_logic.h"
 
 #define PORT 9000
 #define MAX_PLAYERS 5
@@ -31,6 +33,7 @@ typedef struct
 int shm_id;
 int sem_id;
 GameState *game;
+GameLogic game_logic;
 
 // -------- SEMAPHORE FUNCTIONS --------
 void sem_lock()
@@ -166,6 +169,7 @@ int main()
         if (game->player_count >= MIN_PLAYERS && !game->game_active)
         {
             game->game_active = 1;
+	    init_game(&game_logic, game->player_count);
             printf("[!] Game can start (%d players).\n",
                    game->player_count);
         }
@@ -178,7 +182,16 @@ int main()
             handle_client(client_sock, my_id);
         }
 
-        close(client_sock);
+        close(client_if (game->player_count >= MIN_PLAYERS && !game->game_active)
+{
+    game->game_active = 1;
+
+    init_game(&game_logic, game->player_count);
+
+    printf("[!] Game can start (%d players).\n",
+           game->player_count);
+}
+sock);
     }
 
     return 0;
