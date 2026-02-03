@@ -182,16 +182,25 @@ int main()
             handle_client(client_sock, my_id);
         }
 
-        close(client_if (game->player_count >= MIN_PLAYERS && !game->game_active)
-{
+        close(client_sock);
+
+	if (game->player_count >= MIN_PLAYERS && !game->game_active)
+	{
+    	    game->game_active = 1;
+            init_game(&game_logic, game->player_count);
+
+            printf("[!] Game can start (%d players).\n",
+          	   game->player_count);
+	}
+
     game->game_active = 1;
 
     init_game(&game_logic, game->player_count);
 
     printf("[!] Game can start (%d players).\n",
            game->player_count);
-}
-sock);
+	close(client_sock);
+
     }
 
     return 0;
