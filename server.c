@@ -12,6 +12,8 @@
 #include <semaphore.h>
 #include <sys/sem.h>
 #include "game_logic.h"
+#include "scheduler.h"
+#include "game_struct.h"
 
 #define PORT 9000
 #define MAX_PLAYERS 5
@@ -19,21 +21,28 @@
 #define SHM_KEY 98765
 #define SEM_KEY 43210
 
-// -------- SHARED MEMORY STRUCTURE --------
-typedef struct
-{
-    int player_count;
-    int current_turn;
-    int chests[10];
-    int scores[5];
-    int game_active;
-} GameState;
+
+// have been out into game.struct.h 
+// // -------- SHARED MEMORY STRUCTURE --------
+// typedef struct
+// {
+//     int player_count;
+//     int current_turn;
+//     int chests[10];
+//     int scores[5];
+//     int game_active;
+//     int turn_complete;      
+//     int active_players[5];
+//     char log_queue[LOG_QUEUE_SIZE][LOG_MSG_LEN];
+//     int log_head, log_tail, log_count;
+//     pthread_mutex_t log_mutex;
+//     sem_t log_sem;
+// } GameState;
 
 // Global pointers (simplifies cleanup)
 int shm_id;
 int sem_id;
 GameState *game;
-GameLogic game_logic;
 
 // -------- SEMAPHORE FUNCTIONS --------
 void sem_lock()
@@ -47,33 +56,64 @@ void sem_unlock()
     struct sembuf sb = {0, 1, 0};
     semop(sem_id, &sb, 1);
 }
-
+void save_scores();
 // -------- CLEANUP HANDLER --------
 void cleanup(int sig)
 {
-    printf("\n[!] Server shutting down. Cleaning resources...\n");
+    printf("\n[!] Server shutting down. Saving scores...\n");
+
+    save_scores();
     shmdt(game);
     shmctl(shm_id, IPC_RMID, NULL);
     semctl(sem_id, 0, IPC_RMID);
     exit(0);
 }
 
+void load_scores(){
+    FILE *fp =fopen("score.txt","r");
+    if (fp==NULL){
+        for(int i=0; i< MAX_PLAYERS; i++) game->scores[i]=0;
+        return;
+    }
+    for (int i=0; i< MAX_PLAYERS; i++){
+        if(fscanf(fp,"%d",&game->scores[i]) ==EOF) break;
+    }
+    fclose(fp);
+}
+
+void save_scores(){
+    sem_lock();
+    FILE *fp= fopen("score.txt","w");
+    if(fp){
+        for(int i=0; i< game->player_count; i++){
+            fprintf(fp, "%d\n", game->scores[i]);
+        }
+        fclose(fp);
+    }
+    sem_unlock();
+}
 // -------- CLIENT HANDLER --------
 void handle_client(int client_sock, int player_id)
 {
     char buffer[1024];
+    char game_msg[256];
     int n;
 
-    char welcome[200];
-    sprintf(welcome,
-            "Welcome Player %d! Waiting for game to start...\n",
-            player_id + 1);
-    send(client_sock, welcome, strlen(welcome), 0);
+    
+    sprintf(game_msg,"Welcome Player %d! Waiting for game to start...\n",player_id + 1);
+    send(client_sock, game_msg, strlen(game_msg), 0);
 
     while (1)
     {
+        if(game->game_active){
+            if(game->current_turn==player_id){
+                send(client_sock,"Your turn! Type'roll':\n",24,0);  
+            }
+
+        }
         memset(buffer, 0, sizeof(buffer));
         n = recv(client_sock, buffer, sizeof(buffer), 0);
+
 
         if (n <= 0)
         {
@@ -81,8 +121,31 @@ void handle_client(int client_sock, int player_id)
             break;
         }
 
-        printf("Player %d says: %s", player_id + 1, buffer);
+           if (strncmp(buffer, "roll", 4) == 0) {
+        if (game->current_turn == player_id) {
+            int dice = (rand() % 6) + 1;
+            
+            sem_lock();
+            play_turn(&game->logic, player_id, dice, game_msg, sizeof(game_msg));
+            
+            // Handle winning and scores
+            if (game->logic.winner != -1) {
+                game->scores[player_id]++;
+                save_scores(); 
+            }
+            
+            game->turn_complete = 1; // Signal Scheduler
+            sem_unlock();
+
+            enqueue_log(game_msg);
+            send(client_sock, game_msg, strlen(game_msg), 0);
+        } else {
+            send(client_sock, "Wait for your turn...\n", 22, 0);
+        }
     }
+}
+
+    
 
     close(client_sock);
     exit(0);
@@ -109,11 +172,31 @@ int main()
     game = (GameState *)shmat(shm_id, NULL, 0);
     memset(game, 0, sizeof(GameState));
 
+    load_scores();
+
     // -------- SEMAPHORE --------
     sem_id = semget(SEM_KEY, 1, IPC_CREAT | 0666);
     semctl(sem_id, 0, SETVAL, 1);
 
     printf("[+] Shared memory & semaphore initialized.\n");
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+    pthread_mutex_init(&game->log_mutex, &attr);
+    pthread_mutexattr_destroy(&attr); // Clean up attribute
+
+    sem_init(&game->log_sem, 1, 0);
+
+    pthread_t tid_log, tid_sched;
+    if (pthread_create(&tid_log, NULL, logger_thread, NULL) != 0) {
+        perror("Failed to create logger thread");
+    }
+    if (pthread_create(&tid_sched, NULL, scheduler_thread, NULL) != 0) {
+        perror("Failed to create scheduler thread");
+    }
+
+    printf("[+] Scheduler and Logger threads started.\n");
 
     // -------- SOCKET SETUP --------
     server_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -166,10 +249,10 @@ int main()
         printf("[+] Player %d connected from %s\n",
                my_id + 1, inet_ntoa(client_addr.sin_addr));
 
-        if (game->player_count >= MIN_PLAYERS && !game->game_active)
+       if (game->player_count >= MIN_PLAYERS && !game->game_active)
         {
             game->game_active = 1;
-	    init_game(&game_logic, game->player_count);
+            init_game(&game->logic, game->player_count); // changed it to shared memory so all player can see it
             printf("[!] Game can start (%d players).\n",
                    game->player_count);
         }
@@ -183,23 +266,6 @@ int main()
         }
 
         close(client_sock);
-
-	if (game->player_count >= MIN_PLAYERS && !game->game_active)
-	{
-    	    game->game_active = 1;
-            init_game(&game_logic, game->player_count);
-
-            printf("[!] Game can start (%d players).\n",
-          	   game->player_count);
-	}
-
-    game->game_active = 1;
-
-    init_game(&game_logic, game->player_count);
-
-    printf("[!] Game can start (%d players).\n",
-           game->player_count);
-	close(client_sock);
 
     }
 
