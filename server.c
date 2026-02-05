@@ -14,6 +14,9 @@
 #include "game_logic.h"
 #include "scheduler.h"
 #include "game_struct.h"
+#include <sys/select.h>
+#include <time.h>
+#include <sys/types.h>
 
 #define PORT 9000
 #define MAX_PLAYERS 5
@@ -21,8 +24,7 @@
 #define SHM_KEY 98765
 #define SEM_KEY 43210
 
-
-// have been out into game.struct.h 
+// have been out into game.struct.h
 // // -------- SHARED MEMORY STRUCTURE --------
 // typedef struct
 // {
@@ -31,7 +33,7 @@
 //     int chests[10];
 //     int scores[5];
 //     int game_active;
-//     int turn_complete;      
+//     int turn_complete;
 //     int active_players[5];
 //     char log_queue[LOG_QUEUE_SIZE][LOG_MSG_LEN];
 //     int log_head, log_tail, log_count;
@@ -69,23 +71,31 @@ void cleanup(int sig)
     exit(0);
 }
 
-void load_scores(){
-    FILE *fp =fopen("score.txt","r");
-    if (fp==NULL){
-        for(int i=0; i< MAX_PLAYERS; i++) game->scores[i]=0;
+void load_scores()
+{
+    FILE *fp = fopen("score.txt", "r");
+    if (fp == NULL)
+    {
+        for (int i = 0; i < MAX_PLAYERS; i++)
+            game->scores[i] = 0;
         return;
     }
-    for (int i=0; i< MAX_PLAYERS; i++){
-        if(fscanf(fp,"%d",&game->scores[i]) ==EOF) break;
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
+        if (fscanf(fp, "%d", &game->scores[i]) == EOF)
+            break;
     }
     fclose(fp);
 }
 
-void save_scores(){
+void save_scores()
+{
     sem_lock();
-    FILE *fp= fopen("score.txt","w");
-    if(fp){
-        for(int i=0; i< game->player_count; i++){
+    FILE *fp = fopen("score.txt", "w");
+    if (fp)
+    {
+        for (int i = 0; i < game->player_count; i++)
+        {
             fprintf(fp, "%d\n", game->scores[i]);
         }
         fclose(fp);
@@ -99,21 +109,44 @@ void handle_client(int client_sock, int player_id)
     char game_msg[256];
     int n;
 
-    
-    sprintf(game_msg,"Welcome Player %d! Waiting for game to start...\n",player_id + 1);
+    sprintf(game_msg, "Welcome Player %d! Waiting for game to start...\n", player_id + 1);
     send(client_sock, game_msg, strlen(game_msg), 0);
+
+    int last_turn = -1;
 
     while (1)
     {
-        if(game->game_active){
-            if(game->current_turn==player_id){
-                send(client_sock,"Your turn! Type'roll':\n",24,0);  
-            }
+        // prompt once when it's your turn
+        if (game->current_turn != player_id)
+            last_turn = -1;
 
+        if (game->game_active && game->current_turn == player_id && last_turn != game->current_turn)
+        {
+            send(client_sock, "Your turn! Type 'roll':\n", 25, 0);
+            last_turn = game->current_turn;
         }
-        memset(buffer, 0, sizeof(buffer));
-        n = recv(client_sock, buffer, sizeof(buffer), 0);
 
+        // wait for input, but with timeout so loop keeps running
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(client_sock, &fds);
+
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 200000; // 0.2 sec
+
+        int ready = select(client_sock + 1, &fds, NULL, NULL, &tv);
+        if (ready == 0)
+        {
+            continue; // no input yet, loop again (so it can notice turn changes)
+        }
+        if (ready < 0)
+        {
+            continue;
+        }
+
+        memset(buffer, 0, sizeof(buffer));
+        n = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
 
         if (n <= 0)
         {
@@ -121,31 +154,35 @@ void handle_client(int client_sock, int player_id)
             break;
         }
 
-           if (strncmp(buffer, "roll", 4) == 0) {
-        if (game->current_turn == player_id) {
-            int dice = (rand() % 6) + 1;
-            
-            sem_lock();
-            play_turn(&game->logic, player_id, dice, game_msg, sizeof(game_msg));
-            
-            // Handle winning and scores
-            if (game->logic.winner != -1) {
-                game->scores[player_id]++;
-                save_scores(); 
-            }
-            
-            game->turn_complete = 1; // Signal Scheduler
-            sem_unlock();
+        // ONLY process roll if it's your turn
+        if (strncmp(buffer, "roll", 4) == 0)
+        {
+            if (game->current_turn == player_id)
+            {
 
-            enqueue_log(game_msg);
-            send(client_sock, game_msg, strlen(game_msg), 0);
-        } else {
-            send(client_sock, "Wait for your turn...\n", 22, 0);
+                int dice = (rand() % 6) + 1;
+
+                sem_lock();
+                play_turn(&game->logic, player_id, dice, game_msg, sizeof(game_msg));
+
+                if (game->logic.winner != -1)
+                {
+                    game->scores[player_id]++;
+                    save_scores();
+                }
+
+                game->turn_complete = 1;
+                sem_unlock();
+
+                enqueue_log(game_msg);
+                send(client_sock, game_msg, strlen(game_msg), 0);
+            }
+            else
+            {
+                send(client_sock, "Wait for your turn...\n", 22, 0);
+            }
         }
     }
-}
-
-    
 
     close(client_sock);
     exit(0);
@@ -154,12 +191,14 @@ void handle_client(int client_sock, int player_id)
 // -------- MAIN SERVER --------
 int main()
 {
+    srand(time(NULL) ^ getpid());
+    
     int server_sock, client_sock;
     struct sockaddr_in server_addr, client_addr;
     socklen_t addr_size;
 
-    signal(SIGINT, cleanup);      // Ctrl+C cleanup
-    signal(SIGCHLD, SIG_IGN);     // Prevent zombies
+    signal(SIGINT, cleanup);  // Ctrl+C cleanup
+    signal(SIGCHLD, SIG_IGN); // Prevent zombies
 
     // -------- SHARED MEMORY --------
     shm_id = shmget(SHM_KEY, sizeof(GameState), IPC_CREAT | 0666);
@@ -189,10 +228,12 @@ int main()
     sem_init(&game->log_sem, 1, 0);
 
     pthread_t tid_log, tid_sched;
-    if (pthread_create(&tid_log, NULL, logger_thread, NULL) != 0) {
+    if (pthread_create(&tid_log, NULL, logger_thread, NULL) != 0)
+    {
         perror("Failed to create logger thread");
     }
-    if (pthread_create(&tid_sched, NULL, scheduler_thread, NULL) != 0) {
+    if (pthread_create(&tid_sched, NULL, scheduler_thread, NULL) != 0)
+    {
         perror("Failed to create scheduler thread");
     }
 
@@ -249,10 +290,15 @@ int main()
         printf("[+] Player %d connected from %s\n",
                my_id + 1, inet_ntoa(client_addr.sin_addr));
 
-       if (game->player_count >= MIN_PLAYERS && !game->game_active)
+        if (game->player_count >= MIN_PLAYERS && !game->game_active)
         {
             game->game_active = 1;
-            init_game(&game->logic, game->player_count); // changed it to shared memory so all player can see it
+
+            init_game(&game->logic, game->player_count);
+
+            game->current_turn = 0;  // ✅ FIRST TURN
+            game->turn_complete = 0; // ✅ READY FOR SCHEDULER
+
             printf("[!] Game can start (%d players).\n",
                    game->player_count);
         }
@@ -266,7 +312,6 @@ int main()
         }
 
         close(client_sock);
-
     }
 
     return 0;
