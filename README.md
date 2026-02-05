@@ -1,5 +1,7 @@
 # CSN6214-
 Snakes and ladders
+
+#how to run
 First run gcc server.c scheduler.c game_logic.c -o server -pthread
 Second run gcc client.c -o client
 After that run ./server
