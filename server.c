@@ -98,6 +98,7 @@ void save_scores()
         {
             fprintf(fp, "%d\n", game->scores[i]);
         }
+        fflush(fp);
         fclose(fp);
     }
     sem_unlock();
@@ -105,6 +106,7 @@ void save_scores()
 // -------- CLIENT HANDLER --------
 void handle_client(int client_sock, int player_id)
 {
+    srand(time(NULL) ^ (getpid() <<16));
     char buffer[1024];
     char game_msg[256];
     int n;
@@ -116,6 +118,16 @@ void handle_client(int client_sock, int player_id)
 
     while (1)
     {
+        if(game->logic.winner !=-1){
+            char final_msg[50];
+            sprintf(final_msg,"\nGame Over!The winner is Player %d\n",game->logic.winner+1);
+            send(client_sock, final_msg, strlen(final_msg),0);
+            sleep(2);
+
+            close(client_sock);
+            exit(0);
+            break;
+        }
         // prompt once when it's your turn
         if (game->current_turn != player_id)
             last_turn = -1;
@@ -169,17 +181,22 @@ void handle_client(int client_sock, int player_id)
                 {
                     game->scores[player_id]++;
                     save_scores();
+
+                send(client_sock, game_msg, strlen(game_msg), 0);
+
+                char win_banner[50];
+                sprintf(win_banner,"\n Congratulations to PLAYER %d!YOU WON THIS GAME!\n",player_id+ 1);
+                send(client_sock, win_banner,strlen(win_banner),0);
+                }
+                else{
+                    send(client_sock, game_msg,strlen(game_msg),0);
                 }
 
                 game->turn_complete = 1;
                 sem_unlock();
 
                 enqueue_log(game_msg);
-                send(client_sock, game_msg, strlen(game_msg), 0);
-            }
-            else
-            {
-                send(client_sock, "Wait for your turn...\n", 22, 0);
+    
             }
         }
     }
@@ -210,6 +227,8 @@ int main()
 
     game = (GameState *)shmat(shm_id, NULL, 0);
     memset(game, 0, sizeof(GameState));
+
+    game->logic.winner =-1;
 
     load_scores();
 
@@ -295,6 +314,8 @@ int main()
             game->game_active = 1;
 
             init_game(&game->logic, game->player_count);
+
+            game->logic.winner =-1;
 
             game->current_turn = 0;  // ✅ FIRST TURN
             game->turn_complete = 0; // ✅ READY FOR SCHEDULER
