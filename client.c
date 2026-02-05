@@ -23,9 +23,10 @@ int main(){
 
     while (1){
         memset (buffer, 0,1024);
-        int n= recv(sock,buffer,sizeof(buffer),0);
+        int n= recv(sock,buffer,sizeof(buffer)-1,0);
         if(n<=0){
             printf("Connection closed by server.\n");
+            break;
         }
 
         printf("%s",buffer);
