@@ -58,6 +58,7 @@ void sem_unlock()
     struct sembuf sb = {0, 1, 0};
     semop(sem_id, &sb, 1);
 }
+void save_scores();
 // -------- CLEANUP HANDLER --------
 void cleanup(int sig)
 {
