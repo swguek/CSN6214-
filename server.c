@@ -29,6 +29,9 @@ int shm_id;
 int sem_id;
 GameState *game;
 
+/* ✅ parent PID so only parent writes scores + frees IPC */
+static pid_t parent_pid;
+
 void sem_lock() {
     struct sembuf sb = {0, -1, 0};
     semop(sem_id, &sb, 1);
@@ -39,41 +42,58 @@ void sem_unlock() {
     semop(sem_id, &sb, 1);
 }
 
-/* cleanup DOES NOT save scores anymore */
+static void load_scores();
+
+/* ✅ ONLY parent writes the file */
+static void save_scores_parent_only() {
+    sem_lock();
+    FILE *fp = fopen("scores.txt", "w");
+    if (fp) {
+        for (int i = 0; i < MAX_PLAYERS; i++) {
+            fprintf(fp, "%d\n", game->scores[i]);
+        }
+        fclose(fp);
+    }
+    sem_unlock();
+}
+
+/* ✅ cleanup: children exit silently, parent saves + removes shm/sem */
 static void cleanup(int sig) {
     (void)sig;
-    printf("\n[!] Server shutting down.\n");
+
+    if (getpid() != parent_pid) {
+        exit(0);
+    }
+
+    printf("\n[!] Server shutting down. Saving scores...\n");
+    save_scores_parent_only();
+
     shmdt(game);
     shmctl(shm_id, IPC_RMID, NULL);
     semctl(sem_id, 0, IPC_RMID);
+
     exit(0);
 }
 
 static void load_scores() {
     FILE *fp = fopen("scores.txt", "r");
     if (!fp) {
+        /* if no file yet, start from 0 */
+        for (int i = 0; i < MAX_PLAYERS; i++) game->scores[i] = 0;
         fp = fopen("scores.txt", "w");
-        if (fp) fclose(fp);
+        if (fp) {
+            for (int i = 0; i < MAX_PLAYERS; i++) fprintf(fp, "0\n");
+            fclose(fp);
+        }
         return;
     }
 
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (fscanf(fp, "%d", &game->scores[i]) == EOF)
-            break;
+        if (fscanf(fp, "%d", &game->scores[i]) == EOF) {
+            game->scores[i] = 0;
+        }
     }
     fclose(fp);
-}
-
-static void save_scores() {
-    sem_lock();
-    FILE *fp = fopen("scores.txt", "w");
-    if (fp) {
-        for (int i = 0; i < game->player_count; i++) {
-            fprintf(fp, "%d\n", game->scores[i]);
-        }
-        fclose(fp);
-    }
-    sem_unlock();
 }
 
 static void handle_client(int client_sock, int player_id) {
@@ -83,9 +103,8 @@ static void handle_client(int client_sock, int player_id) {
     char msg[256];
 
     snprintf(msg, sizeof(msg),
-        "Welcome Player %d!\n"
-        "RULES: Reach tile %d to WIN. BOOST goes up, BACK goes down, TRAP skips.\n",
-        player_id + 1, BOARD_SIZE);
+             "Welcome Player %d!\nRULES: Reach tile %d to WIN. BOOST goes up, BACK goes down, TRAP skips.\n",
+             player_id + 1, BOARD_SIZE);
     send(client_sock, msg, strlen(msg), 0);
 
     int last_turn = -1;
@@ -94,23 +113,17 @@ static void handle_client(int client_sock, int player_id) {
         if (game->logic.winner != -1) {
             char final_msg[120];
             snprintf(final_msg, sizeof(final_msg),
-                "\nGAME OVER! Winner is Player %d (Reached %d)\n",
-                game->logic.winner + 1, BOARD_SIZE);
+                     "\nGAME OVER! Winner is Player %d (Reached %d)\n",
+                     game->logic.winner + 1, BOARD_SIZE);
             send(client_sock, final_msg, strlen(final_msg), 0);
             usleep(300000);
             break;
         }
 
-        if (game->current_turn != player_id)
-            last_turn = -1;
+        if (game->current_turn != player_id) last_turn = -1;
 
-        if (game->game_active &&
-            game->current_turn == player_id &&
-            last_turn != game->current_turn) {
-
-            send(client_sock,
-                "Your turn! Press Enter (client auto) or type roll:\n",
-                54, 0);
+        if (game->game_active && game->current_turn == player_id && last_turn != game->current_turn) {
+            send(client_sock, "Your turn! Press Enter (client auto) or type roll:\n", 54, 0);
             last_turn = game->current_turn;
         }
 
@@ -129,18 +142,16 @@ static void handle_client(int client_sock, int player_id) {
         int n = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
         if (n <= 0) break;
 
-        if (strncmp(buffer, "roll", 4) == 0 ||
-            buffer[0] == '\n' || buffer[0] == '\r') {
-
+        if (strncmp(buffer, "roll", 4) == 0 || buffer[0] == '\n' || buffer[0] == '\r') {
             if (game->current_turn == player_id) {
                 int dice = (rand() % 6) + 1;
 
                 sem_lock();
                 play_turn(&game->logic, player_id, dice, msg, sizeof(msg));
 
+                /* ✅ ONLY increment in shared memory; parent will write to file */
                 if (game->logic.winner == player_id) {
                     game->scores[player_id]++;
-                    save_scores();
                 }
 
                 game->turn_complete = 1;
@@ -159,6 +170,8 @@ static void handle_client(int client_sock, int player_id) {
 }
 
 int main() {
+    parent_pid = getpid();
+
     signal(SIGINT, cleanup);
     signal(SIGCHLD, SIG_IGN);
 
@@ -170,14 +183,9 @@ int main() {
 
     game = (GameState *)shmat(shm_id, NULL, 0);
     memset(game, 0, sizeof(GameState));
-
-    /* ✅ THIS IS THE IMPORTANT FIX */
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        game->scores[i] = 0;
-    }
-
     game->logic.winner = -1;
 
+    /* ✅ make sure scores are always valid */
     load_scores();
 
     sem_id = semget(SEM_KEY, 1, IPC_CREAT | 0666);
@@ -200,6 +208,11 @@ int main() {
     printf("[+] Scheduler and Logger threads started.\n");
 
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_sock < 0) {
+        perror("socket");
+        exit(1);
+    }
+
     int opt = 1;
     setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -210,15 +223,17 @@ int main() {
     server_addr.sin_port = htons(PORT);
     server_addr.sin_addr.s_addr = INADDR_ANY;
 
-    bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
-    listen(server_sock, MAX_PLAYERS);
+    if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind");
+        exit(1);
+    }
 
+    listen(server_sock, MAX_PLAYERS);
     printf("[+] Server listening on port %d\n", PORT);
 
     while (1) {
         addr_size = sizeof(client_addr);
-        int client_sock = accept(server_sock,
-            (struct sockaddr *)&client_addr, &addr_size);
+        int client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &addr_size);
         if (client_sock < 0) continue;
 
         sem_lock();
@@ -228,15 +243,21 @@ int main() {
             continue;
         }
 
-        int my_id = game->player_count++;
-        printf("[+] Player %d connected\n", my_id + 1);
+        int my_id = game->player_count;
+        game->player_count++;
+
+        printf("[+] Player %d connected from %s\n", my_id + 1, inet_ntoa(client_addr.sin_addr));
 
         if (game->player_count >= MIN_PLAYERS && !game->game_active) {
             game->game_active = 1;
+
             init_game(&game->logic, game->player_count);
             game->logic.winner = -1;
+
             game->current_turn = 0;
             game->turn_complete = 0;
+
+            printf("[!] Game can start (%d players).\n", game->player_count);
             enqueue_log("Game started (need reach 50 to win)");
         }
         sem_unlock();
