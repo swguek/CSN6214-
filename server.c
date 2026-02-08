@@ -1,3 +1,9 @@
+/*
+ * Contributor:
+ * Member 1 – Server setup, sockets, fork, shared memory, IPC
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
