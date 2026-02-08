@@ -1,8 +1,3 @@
-/*
- * Contributor:
- * Member 3 – Round-robin scheduler and turn management
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +6,11 @@
 #include "game_struct.h"
 
 extern GameState *game;
+
+/*
+ * Contributor:
+ * Member 4 – Concurrent logging and score persistence
+ */
 
 // add to log queue
 void enqueue_log(char *msg) {
@@ -53,6 +53,11 @@ void *logger_thread(void *arg) {
     }
     return NULL;
 }
+
+/*
+ * Contributor:
+ * Member 3 – Round-robin scheduler and turn management
+ */
 
 // Round Robin Scheduler
 void *scheduler_thread(void *arg) {
