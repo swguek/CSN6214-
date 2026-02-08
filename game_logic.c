@@ -1,3 +1,9 @@
+/*
+ * Contributor:
+ * Member 2 – Game rules, dice movement, special effects, win conditions
+ */
+
+
 #include "game_logic.h"
 #include <stdio.h>
 
