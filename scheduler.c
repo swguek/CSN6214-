@@ -1,3 +1,8 @@
+/*
+ * Contributor:
+ * Member 3 – Round-robin scheduler and turn management
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
