@@ -13,6 +13,7 @@
 #include <sys/sem.h>
 #include <sys/select.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "game_logic.h"
 #include "scheduler.h"
@@ -38,12 +39,10 @@ void sem_unlock() {
     semop(sem_id, &sb, 1);
 }
 
-static void save_scores();
-
+/* cleanup DOES NOT save scores anymore */
 static void cleanup(int sig) {
     (void)sig;
-    printf("\n[!] Server shutting down. Saving scores...\n");
-    save_scores();
+    printf("\n[!] Server shutting down.\n");
     shmdt(game);
     shmctl(shm_id, IPC_RMID, NULL);
     semctl(sem_id, 0, IPC_RMID);
@@ -53,14 +52,14 @@ static void cleanup(int sig) {
 static void load_scores() {
     FILE *fp = fopen("scores.txt", "r");
     if (!fp) {
-        for (int i = 0; i < MAX_PLAYERS; i++) game->scores[i] = 0;
         fp = fopen("scores.txt", "w");
         if (fp) fclose(fp);
         return;
     }
 
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (fscanf(fp, "%d", &game->scores[i]) == EOF) break;
+        if (fscanf(fp, "%d", &game->scores[i]) == EOF)
+            break;
     }
     fclose(fp);
 }
@@ -84,28 +83,34 @@ static void handle_client(int client_sock, int player_id) {
     char msg[256];
 
     snprintf(msg, sizeof(msg),
-             "Welcome Player %d!\nRULES: Reach tile %d to WIN. BOOST goes up, BACK goes down, TRAP skips.\n",
-             player_id + 1, BOARD_SIZE);
+        "Welcome Player %d!\n"
+        "RULES: Reach tile %d to WIN. BOOST goes up, BACK goes down, TRAP skips.\n",
+        player_id + 1, BOARD_SIZE);
     send(client_sock, msg, strlen(msg), 0);
 
     int last_turn = -1;
 
     while (1) {
-        // if game ended, send final message (do NOT instantly kill socket)
         if (game->logic.winner != -1) {
             char final_msg[120];
             snprintf(final_msg, sizeof(final_msg),
-                     "\nGAME OVER! Winner is Player %d (Reached %d)\n",
-                     game->logic.winner + 1, BOARD_SIZE);
+                "\nGAME OVER! Winner is Player %d (Reached %d)\n",
+                game->logic.winner + 1, BOARD_SIZE);
             send(client_sock, final_msg, strlen(final_msg), 0);
             usleep(300000);
             break;
         }
 
-        if (game->current_turn != player_id) last_turn = -1;
+        if (game->current_turn != player_id)
+            last_turn = -1;
 
-        if (game->game_active && game->current_turn == player_id && last_turn != game->current_turn) {
-            send(client_sock, "Your turn! Press Enter (client auto) or type roll:\n", 54, 0);
+        if (game->game_active &&
+            game->current_turn == player_id &&
+            last_turn != game->current_turn) {
+
+            send(client_sock,
+                "Your turn! Press Enter (client auto) or type roll:\n",
+                54, 0);
             last_turn = game->current_turn;
         }
 
@@ -124,7 +129,9 @@ static void handle_client(int client_sock, int player_id) {
         int n = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
         if (n <= 0) break;
 
-        if (strncmp(buffer, "roll", 4) == 0 || buffer[0] == '\n' || buffer[0] == '\r') {
+        if (strncmp(buffer, "roll", 4) == 0 ||
+            buffer[0] == '\n' || buffer[0] == '\r') {
+
             if (game->current_turn == player_id) {
                 int dice = (rand() % 6) + 1;
 
@@ -163,6 +170,12 @@ int main() {
 
     game = (GameState *)shmat(shm_id, NULL, 0);
     memset(game, 0, sizeof(GameState));
+
+    /* ✅ THIS IS THE IMPORTANT FIX */
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        game->scores[i] = 0;
+    }
+
     game->logic.winner = -1;
 
     load_scores();
@@ -172,7 +185,6 @@ int main() {
 
     printf("[+] Shared memory & semaphore initialized.\n");
 
-    // init process-shared mutex for logger
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
@@ -188,11 +200,6 @@ int main() {
     printf("[+] Scheduler and Logger threads started.\n");
 
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_sock < 0) {
-        perror("socket");
-        exit(1);
-    }
-
     int opt = 1;
     setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -203,17 +210,15 @@ int main() {
     server_addr.sin_port = htons(PORT);
     server_addr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("bind");
-        exit(1);
-    }
-
+    bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
     listen(server_sock, MAX_PLAYERS);
+
     printf("[+] Server listening on port %d\n", PORT);
 
     while (1) {
         addr_size = sizeof(client_addr);
-        int client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &addr_size);
+        int client_sock = accept(server_sock,
+            (struct sockaddr *)&client_addr, &addr_size);
         if (client_sock < 0) continue;
 
         sem_lock();
@@ -223,21 +228,15 @@ int main() {
             continue;
         }
 
-        int my_id = game->player_count;
-        game->player_count++;
-
-        printf("[+] Player %d connected from %s\n", my_id + 1, inet_ntoa(client_addr.sin_addr));
+        int my_id = game->player_count++;
+        printf("[+] Player %d connected\n", my_id + 1);
 
         if (game->player_count >= MIN_PLAYERS && !game->game_active) {
             game->game_active = 1;
-
             init_game(&game->logic, game->player_count);
             game->logic.winner = -1;
-
             game->current_turn = 0;
             game->turn_complete = 0;
-
-            printf("[!] Game can start (%d players).\n", game->player_count);
             enqueue_log("Game started (need reach 50 to win)");
         }
         sem_unlock();

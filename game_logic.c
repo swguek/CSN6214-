@@ -15,23 +15,22 @@ void init_game(GameLogic *g, int player_count) {
         g->board[i].value = 0;
     }
 
-    // reset players
+    // reset players (important for multi-game)
     for (int i = 0; i < MAX_PLAYERS; i++) {
         g->pos[i] = 0;
         g->skip[i] = 0;
     }
 
-    g->winner = -1;
+    g->winner = -1;   // ensure fresh game
 
     // Special tiles (0-based indexes)
-    // tile shown = index+1
 
     // early
-    g->board[2]  = (Tile){TILE_BOOST, 4};  // 3 -> 7
-    g->board[5]  = (Tile){TILE_BACK,  3};  // 6 -> 3
+    g->board[2]  = (Tile){TILE_BOOST, 4};
+    g->board[5]  = (Tile){TILE_BACK,  3};
     g->board[8]  = (Tile){TILE_TRAP,  0};
-    g->board[10] = (Tile){TILE_BOOST, 5};  // 11 -> 16
-    g->board[14] = (Tile){TILE_BACK,  4};  // 15 -> 11
+    g->board[10] = (Tile){TILE_BOOST, 5};
+    g->board[14] = (Tile){TILE_BACK,  4};
 
     // mid
     g->board[18] = (Tile){TILE_TRAP,  0};
@@ -52,13 +51,17 @@ void play_turn(GameLogic *g, int player_id, int dice,
                char *msg, int msg_size) {
 
     if (g->winner != -1) {
-        snprintf(msg, msg_size, "Game over. Winner: Player %d\n", g->winner + 1);
+        snprintf(msg, msg_size,
+                 "Game over. Winner: Player %d\n",
+                 g->winner + 1);
         return;
     }
 
     if (g->skip[player_id]) {
         g->skip[player_id] = 0;
-        snprintf(msg, msg_size, "Player %d skips this turn (TRAP)\n", player_id + 1);
+        snprintf(msg, msg_size,
+                 "Player %d skips this turn (TRAP)\n",
+                 player_id + 1);
         return;
     }
 
@@ -67,10 +70,10 @@ void play_turn(GameLogic *g, int player_id, int dice,
     clamp(&pos);
     g->pos[player_id] = pos;
 
-    // win by landing on 50 (index 49)
     if (pos == BOARD_SIZE - 1) {
         g->winner = player_id;
-        snprintf(msg, msg_size, "P%d rolled %d: %d -> %d and WON!\n",
+        snprintf(msg, msg_size,
+                 "P%d rolled %d: %d -> %d and WON!\n",
                  player_id + 1, dice, old + 1, pos + 1);
         return;
     }
@@ -84,12 +87,14 @@ void play_turn(GameLogic *g, int player_id, int dice,
 
         if (after == BOARD_SIZE - 1) {
             g->winner = player_id;
-            snprintf(msg, msg_size, "P%d rolled %d: %d -> %d (BOOST to %d) and WON!\n",
+            snprintf(msg, msg_size,
+                     "P%d rolled %d: %d -> %d (BOOST to %d) and WON!\n",
                      player_id + 1, dice, old + 1, pos + 1, after + 1);
             return;
         }
 
-        snprintf(msg, msg_size, "P%d rolled %d: %d -> %d (BOOST to %d)\n",
+        snprintf(msg, msg_size,
+                 "P%d rolled %d: %d -> %d (BOOST to %d)\n",
                  player_id + 1, dice, old + 1, pos + 1, after + 1);
         return;
     }
@@ -99,18 +104,21 @@ void play_turn(GameLogic *g, int player_id, int dice,
         clamp(&after);
         g->pos[player_id] = after;
 
-        snprintf(msg, msg_size, "P%d rolled %d: %d -> %d (BACK to %d)\n",
+        snprintf(msg, msg_size,
+                 "P%d rolled %d: %d -> %d (BACK to %d)\n",
                  player_id + 1, dice, old + 1, pos + 1, after + 1);
         return;
     }
 
     if (t.type == TILE_TRAP) {
         g->skip[player_id] = 1;
-        snprintf(msg, msg_size, "P%d rolled %d: %d -> %d (TRAP: skip next)\n",
+        snprintf(msg, msg_size,
+                 "P%d rolled %d: %d -> %d (TRAP: skip next)\n",
                  player_id + 1, dice, old + 1, pos + 1);
         return;
     }
 
-    snprintf(msg, msg_size, "P%d rolled %d: %d -> %d\n",
+    snprintf(msg, msg_size,
+             "P%d rolled %d: %d -> %d\n",
              player_id + 1, dice, old + 1, pos + 1);
 }

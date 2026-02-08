@@ -1,25 +1,25 @@
 Game started (need reach 50 to win)
-P1 rolled 1: 1 -> 2
+P1 rolled 4: 1 -> 5
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 6: 1 -> 7
+P2 rolled 5: 1 -> 6 (BACK to 3)
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 4: 1 -> 5
+P3 rolled 6: 1 -> 7
 
 Turn Finished: Player 3
 Turn Start: Player 1
-P1 rolled 6: 2 -> 8
+P1 rolled 3: 5 -> 8
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 3: 7 -> 10
+P2 rolled 1: 3 -> 4
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 1: 5 -> 6 (BACK to 3)
+P3 rolled 3: 7 -> 10
 
 Turn Finished: Player 3
 Turn Start: Player 1
@@ -27,59 +27,119 @@ P1 rolled 5: 8 -> 13
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 1: 10 -> 11 (BOOST to 16)
+P2 rolled 3: 4 -> 7
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 3: 3 -> 6 (BACK to 3)
+P3 rolled 6: 10 -> 16
 
 Turn Finished: Player 3
 Turn Start: Player 1
-P1 rolled 3: 13 -> 16
+P1 rolled 5: 13 -> 18
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 1: 16 -> 17
+P2 rolled 5: 7 -> 12
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 4: 3 -> 7
+P3 rolled 1: 16 -> 17
 
 Turn Finished: Player 3
 Turn Start: Player 1
-P1 rolled 1: 16 -> 17
+P1 rolled 4: 18 -> 22
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 5: 17 -> 22
+P2 rolled 5: 12 -> 17
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 5: 7 -> 12
+P3 rolled 1: 17 -> 18
 
 Turn Finished: Player 3
 Turn Start: Player 1
-P1 rolled 6: 17 -> 23
+P1 rolled 1: 22 -> 23
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 3: 22 -> 25 (BACK to 20)
+P2 rolled 1: 17 -> 18
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 6: 12 -> 18
+P3 rolled 2: 18 -> 20
 
 Turn Finished: Player 3
 Turn Start: Player 1
-P1 rolled 5: 23 -> 28 (TRAP: skip next)
+P1 rolled 3: 23 -> 26
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 3: 20 -> 23
+P2 rolled 1: 18 -> 19 (TRAP: skip next)
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 6: 18 -> 24
+P3 rolled 4: 20 -> 24
+
+Turn Finished: Player 3
+Turn Start: Player 1
+P1 rolled 5: 26 -> 31 (BOOST to 37)
+
+Turn Finished: Player 1
+Turn Start: Player 2
+Player 2 skips this turn (TRAP)
+
+Turn Finished: Player 2
+Turn Start: Player 3
+P3 rolled 4: 24 -> 28 (TRAP: skip next)
+
+Turn Finished: Player 3
+Turn Start: Player 1
+P1 rolled 1: 37 -> 38
+
+Turn Finished: Player 1
+Turn Start: Player 2
+P2 rolled 6: 19 -> 25 (BACK to 20)
+
+Turn Finished: Player 2
+Turn Start: Player 3
+Player 3 skips this turn (TRAP)
+
+Turn Finished: Player 3
+Turn Start: Player 1
+P1 rolled 2: 38 -> 40
+
+Turn Finished: Player 1
+Turn Start: Player 2
+P2 rolled 6: 20 -> 26
+
+Turn Finished: Player 2
+Turn Start: Player 3
+P3 rolled 6: 28 -> 34 (BACK to 28)
+
+Turn Finished: Player 3
+Turn Start: Player 1
+P1 rolled 3: 40 -> 43
+
+Turn Finished: Player 1
+Turn Start: Player 2
+P2 rolled 6: 26 -> 32
+
+Turn Finished: Player 2
+Turn Start: Player 3
+P3 rolled 6: 28 -> 34 (BACK to 28)
+
+Turn Finished: Player 3
+Turn Start: Player 1
+P1 rolled 4: 43 -> 47 (TRAP: skip next)
+
+Turn Finished: Player 1
+Turn Start: Player 2
+P2 rolled 6: 32 -> 38
+
+Turn Finished: Player 2
+Turn Start: Player 3
+P3 rolled 4: 28 -> 32
 
 Turn Finished: Player 3
 Turn Start: Player 1
@@ -87,47 +147,13 @@ Player 1 skips this turn (TRAP)
 
 Turn Finished: Player 1
 Turn Start: Player 2
-P2 rolled 2: 23 -> 25 (BACK to 20)
+P2 rolled 5: 38 -> 43
 
 Turn Finished: Player 2
 Turn Start: Player 3
-P3 rolled 2: 24 -> 26
+P3 rolled 1: 32 -> 33
 
 Turn Finished: Player 3
 Turn Start: Player 1
-P1 rolled 3: 28 -> 31 (BOOST to 37)
-
-Turn Finished: Player 1
-Turn Start: Player 2
-P2 rolled 1: 20 -> 21 (BOOST to 27)
-
-Turn Finished: Player 2
-Turn Start: Player 3
-P3 rolled 4: 26 -> 30
-
-Turn Finished: Player 3
-Turn Start: Player 1
-P1 rolled 5: 37 -> 42
-
-Turn Finished: Player 1
-Turn Start: Player 2
-P2 rolled 2: 27 -> 29
-
-Turn Finished: Player 2
-Turn Start: Player 3
-P3 rolled 2: 30 -> 32
-
-Turn Finished: Player 3
-Turn Start: Player 1
-P1 rolled 3: 42 -> 45
-
-Turn Finished: Player 1
-Turn Start: Player 2
-P2 rolled 4: 29 -> 33
-
-Turn Finished: Player 2
-Turn Start: Player 3
-P3 rolled 4: 32 -> 36
-
-Turn Finished: Player 3
-Turn Start: Player 1
+Game ended. Resetting for next round.
+New game started.
